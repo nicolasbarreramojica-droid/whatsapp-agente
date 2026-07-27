@@ -1,15 +1,16 @@
 {
   "name": "whatsapp-relevance-webhook",
   "version": "1.0.0",
-  "description": "Webhook que conecta WhatsApp Business con un agente de Relevance AI",
+  "description": "Webhook WhatsApp + Relevance AI",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "build": "echo 'No build needed'"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "4.18.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": "18.x"
   }
 }
