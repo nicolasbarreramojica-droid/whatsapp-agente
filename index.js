@@ -50,7 +50,7 @@ app.post("/webhook", async (req, res) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `project:${RELEVANCE_API_KEY}`,
+          Authorization: RELEVANCE_API_KEY,
         },
         body: JSON.stringify({
           agent_id: RELEVANCE_AGENT_ID,
