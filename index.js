@@ -92,7 +92,7 @@ async function pollForReply(conversationId, maxAttempts = 20, interval = 3000) {
 
     try {
       const res = await fetch(
-        `https://api-bcbe5a.stack.tryrelevance.com/latest/agents/${RELEVANCE_AGENT_ID}/conversations/${conversationId}`,
+        `https://api-bcbe5a.stack.tryrelevance.com/latest/conversations/${conversationId}`,
         {
           headers: {
             Authorization: RELEVANCE_API_KEY,
@@ -100,9 +100,10 @@ async function pollForReply(conversationId, maxAttempts = 20, interval = 3000) {
         }
       );
 
-      const data = await res.json();
-      console.log(`🔄 Intento ${i + 1}:`, JSON.stringify(data).substring(0, 300));
+      const text = await res.text();
+      console.log(`🔄 Intento ${i + 1} raw:`, text.substring(0, 300));
 
+      const data = JSON.parse(text);
       const messages = data?.messages || [];
       const agentMessages = messages.filter(m => m.role === "agent" || m.role === "assistant");
 
