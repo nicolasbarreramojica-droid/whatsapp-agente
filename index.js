@@ -65,17 +65,16 @@ app.post("/webhook", async (req, res) => {
     const triggerData = await triggerRes.json();
     console.log("🚀 Agente disparado:", JSON.stringify(triggerData));
 
-    const jobId = triggerData?.job_info?.job_id;
     const conversationId = triggerData?.conversation_id;
 
-    if (!jobId || !conversationId) {
-      console.error("❌ No se obtuvo job_id o conversation_id");
+    if (!conversationId) {
+      console.error("❌ No se obtuvo conversation_id");
       await sendWhatsAppMessage(from, "Lo siento, hubo un error al procesar tu mensaje.");
       return;
     }
 
-    // 2. Esperar y obtener la respuesta del agente (polling)
-    const agentReply = await pollForReply(conversationId, jobId);
+    // 2. Polling para obtener la respuesta
+    const agentReply = await pollForReply(conversationId);
 
     // 3. Enviar respuesta por WhatsApp
     await sendWhatsAppMessage(from, agentReply);
@@ -87,13 +86,13 @@ app.post("/webhook", async (req, res) => {
 });
 
 // ─── Polling para obtener la respuesta del agente ────────────────────────────
-async function pollForReply(conversationId, jobId, maxAttempts = 20, interval = 3000) {
+async function pollForReply(conversationId, maxAttempts = 20, interval = 3000) {
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(resolve => setTimeout(resolve, interval));
 
     try {
       const res = await fetch(
-        `https://api-bcbe5a.stack.tryrelevance.com/latest/agents/conversations/${conversationId}`,
+        `https://api-bcbe5a.stack.tryrelevance.com/latest/agents/${RELEVANCE_AGENT_ID}/conversations/${conversationId}`,
         {
           headers: {
             Authorization: RELEVANCE_API_KEY,
@@ -102,12 +101,11 @@ async function pollForReply(conversationId, jobId, maxAttempts = 20, interval = 
       );
 
       const data = await res.json();
-      console.log(`🔄 Intento ${i + 1}:`, JSON.stringify(data).substring(0, 200));
+      console.log(`🔄 Intento ${i + 1}:`, JSON.stringify(data).substring(0, 300));
 
-      // Buscar la última respuesta del agente
-      const messages = data?.messages || data?.conversation || [];
-      const agentMessages = messages.filter(m => m.role === "assistant" || m.role === "agent");
-      
+      const messages = data?.messages || [];
+      const agentMessages = messages.filter(m => m.role === "agent" || m.role === "assistant");
+
       if (agentMessages.length > 0) {
         const lastMessage = agentMessages[agentMessages.length - 1];
         const reply = lastMessage?.content || lastMessage?.text || lastMessage?.message;
@@ -115,11 +113,6 @@ async function pollForReply(conversationId, jobId, maxAttempts = 20, interval = 
           console.log("✅ Respuesta obtenida:", reply);
           return reply;
         }
-      }
-
-      // Verificar si el job terminó
-      if (data?.state === "complete" || data?.state === "done") {
-        break;
       }
 
     } catch (err) {
