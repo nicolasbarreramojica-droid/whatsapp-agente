@@ -65,16 +65,17 @@ app.post("/webhook", async (req, res) => {
     const triggerData = await triggerRes.json();
     console.log("🚀 Agente disparado:", JSON.stringify(triggerData));
 
-    const conversationId = triggerData?.conversation_id;
+    const studioId = triggerData?.job_info?.studio_id;
+    const jobId = triggerData?.job_info?.job_id;
 
-    if (!conversationId) {
-      console.error("❌ No se obtuvo conversation_id");
+    if (!studioId || !jobId) {
+      console.error("❌ No se obtuvo studio_id o job_id");
       await sendWhatsAppMessage(from, "Lo siento, hubo un error al procesar tu mensaje.");
       return;
     }
 
     // 2. Polling para obtener la respuesta
-    const agentReply = await pollForReply(conversationId);
+    const agentReply = await pollForReply(studioId, jobId);
 
     // 3. Enviar respuesta por WhatsApp
     await sendWhatsAppMessage(from, agentReply);
@@ -85,33 +86,44 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// ─── Polling para obtener la respuesta del agente ────────────────────────────
-async function pollForReply(conversationId, maxAttempts = 20, interval = 3000) {
+// ─── Polling usando async_poll ────────────────────────────────────────────────
+async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) {
+  const url = `https://api-bcbe5a.stack.tryrelevance.com/latest/studios/${studioId}/async_poll/${jobId}`;
+
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(resolve => setTimeout(resolve, interval));
 
     try {
-      const res = await fetch(
-`https://api-bcbe5a.stack.tryrelevance.com/latest/agents/${RELEVANCE_AGENT_ID}/conversations/${conversationId}/messages`,        {
-          headers: {
-            Authorization: RELEVANCE_API_KEY,
-          },
+      const res = await fetch(url, {
+        headers: {
+          Authorization: RELEVANCE_API_KEY,
+        },
+      });
+
+      const data = await res.json();
+      console.log(`🔄 Intento ${i + 1}:`, JSON.stringify(data).substring(0, 300));
+
+      // Buscar respuesta en updates
+      const updates = data?.updates || [];
+      for (const update of updates) {
+        if (update?.type === "chain-success") {
+          const output = update?.output?.output?.answer ||
+                        update?.output?.answer ||
+                        update?.output?.text ||
+                        update?.output;
+          if (output && typeof output === "string") {
+            console.log("✅ Respuesta obtenida:", output);
+            return output;
+          }
         }
-      );
+      }
 
-      const text = await res.text();
-      console.log(`🔄 Intento ${i + 1} raw:`, text.substring(0, 300));
-
-      const data = JSON.parse(text);
-      const messages = data?.messages || [];
-      const agentMessages = messages.filter(m => m.role === "agent" || m.role === "assistant");
-
-      if (agentMessages.length > 0) {
-        const lastMessage = agentMessages[agentMessages.length - 1];
-        const reply = lastMessage?.content || lastMessage?.text || lastMessage?.message;
-        if (reply) {
-          console.log("✅ Respuesta obtenida:", reply);
-          return reply;
+      // Si está completo pero sin respuesta clara
+      if (data?.type === "chain-success" || data?.status === "complete") {
+        const output = data?.output?.output?.answer || data?.output?.answer || data?.output;
+        if (output && typeof output === "string") {
+          console.log("✅ Respuesta obtenida:", output);
+          return output;
         }
       }
 
