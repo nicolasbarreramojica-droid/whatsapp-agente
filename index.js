@@ -92,8 +92,7 @@ async function pollForReply(conversationId, maxAttempts = 20, interval = 3000) {
 
     try {
       const res = await fetch(
-        `https://api-bcbe5a.stack.tryrelevance.com/latest/conversations/${conversationId}`,
-        {
+`https://api-bcbe5a.stack.tryrelevance.com/latest/agents/${RELEVANCE_AGENT_ID}/conversations/${conversationId}/messages`,        {
           headers: {
             Authorization: RELEVANCE_API_KEY,
           },
