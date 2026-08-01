@@ -42,9 +42,12 @@ app.post("/webhook", async (req, res) => {
 
   console.log(`📩 Mensaje de ${from}: ${text}`);
 
+  // Responder a Meta inmediatamente para evitar timeout
+  res.sendStatus(200);
+
   try {
-    // 1. Enviar mensaje al agente de Relevance AI
-    const relevanceRes = await fetch(
+    // 1. Disparar el agente de Relevance AI
+    const triggerRes = await fetch(
       "https://api-bcbe5a.stack.tryrelevance.com/latest/agents/trigger",
       {
         method: "POST",
@@ -59,26 +62,73 @@ app.post("/webhook", async (req, res) => {
       }
     );
 
-    const relevanceData = await relevanceRes.json();
-    console.log("🤖 Respuesta Relevance:", JSON.stringify(relevanceData));
+    const triggerData = await triggerRes.json();
+    console.log("🚀 Agente disparado:", JSON.stringify(triggerData));
 
-    // 2. Extraer respuesta del agente
-    const agentReply =
-      relevanceData?.output?.output?.answer ||
-      relevanceData?.output?.answer ||
-      relevanceData?.answer ||
-      relevanceData?.message ||
-      "Lo siento, no pude procesar tu mensaje.";
+    const jobId = triggerData?.job_info?.job_id;
+    const conversationId = triggerData?.conversation_id;
+
+    if (!jobId || !conversationId) {
+      console.error("❌ No se obtuvo job_id o conversation_id");
+      await sendWhatsAppMessage(from, "Lo siento, hubo un error al procesar tu mensaje.");
+      return;
+    }
+
+    // 2. Esperar y obtener la respuesta del agente (polling)
+    const agentReply = await pollForReply(conversationId, jobId);
 
     // 3. Enviar respuesta por WhatsApp
     await sendWhatsAppMessage(from, agentReply);
+
   } catch (err) {
     console.error("❌ Error:", err.message);
     await sendWhatsAppMessage(from, "Ocurrió un error. Intenta de nuevo.");
   }
-
-  res.sendStatus(200);
 });
+
+// ─── Polling para obtener la respuesta del agente ────────────────────────────
+async function pollForReply(conversationId, jobId, maxAttempts = 20, interval = 3000) {
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(resolve => setTimeout(resolve, interval));
+
+    try {
+      const res = await fetch(
+        `https://api-bcbe5a.stack.tryrelevance.com/latest/agents/conversations/${conversationId}`,
+        {
+          headers: {
+            Authorization: RELEVANCE_API_KEY,
+          },
+        }
+      );
+
+      const data = await res.json();
+      console.log(`🔄 Intento ${i + 1}:`, JSON.stringify(data).substring(0, 200));
+
+      // Buscar la última respuesta del agente
+      const messages = data?.messages || data?.conversation || [];
+      const agentMessages = messages.filter(m => m.role === "assistant" || m.role === "agent");
+      
+      if (agentMessages.length > 0) {
+        const lastMessage = agentMessages[agentMessages.length - 1];
+        const reply = lastMessage?.content || lastMessage?.text || lastMessage?.message;
+        if (reply) {
+          console.log("✅ Respuesta obtenida:", reply);
+          return reply;
+        }
+      }
+
+      // Verificar si el job terminó
+      if (data?.state === "complete" || data?.state === "done") {
+        break;
+      }
+
+    } catch (err) {
+      console.error(`❌ Error en polling intento ${i + 1}:`, err.message);
+    }
+  }
+
+  return "Lo siento, el agente tardó demasiado en responder. Intenta de nuevo.";
+}
 
 // ─── Función para enviar mensajes por WhatsApp ────────────────────────────────
 async function sendWhatsAppMessage(to, text) {
