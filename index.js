@@ -6,6 +6,7 @@ app.use(express.json());
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "mi_token_secreto";
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const INSTAGRAM_TOKEN = process.env.INSTAGRAM_TOKEN;
 const RELEVANCE_API_KEY = process.env.RELEVANCE_API_KEY;
 const RELEVANCE_AGENT_ID = process.env.RELEVANCE_AGENT_ID;
 
@@ -27,24 +28,48 @@ app.get("/webhook", (req, res) => {
 // ─── Recepción de mensajes (POST) ────────────────────────────────────────────
 app.post("/webhook", async (req, res) => {
   const body = req.body;
+  console.log("📨 Webhook recibido:", JSON.stringify(body).substring(0, 300));
 
-  if (body.object !== "whatsapp_business_account") return res.sendStatus(404);
+  // ── WhatsApp ──────────────────────────────────────────────────────────────
+  if (body.object === "whatsapp_business_account") {
+    const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    if (message && message.type === "text") {
+      const from = message.from;
+      const text = message.text.body;
+      console.log(`📩 WhatsApp de ${from}: ${text}`);
+      res.sendStatus(200);
+      await handleMessage(text, from, "whatsapp");
+    } else {
+      res.sendStatus(200);
+    }
+    return;
+  }
 
-  const entry = body.entry?.[0];
-  const changes = entry?.changes?.[0];
-  const value = changes?.value;
-  const message = value?.messages?.[0];
+  // ── Instagram ─────────────────────────────────────────────────────────────
+  if (body.object === "instagram") {
+    const entry = body.entry?.[0];
+    const messaging = entry?.messaging?.[0];
+    if (messaging && messaging.message && !messaging.message.is_echo) {
+      const from = messaging.sender.id;
+      const text = messaging.message.text;
+      if (text) {
+        console.log(`📸 Instagram de ${from}: ${text}`);
+        res.sendStatus(200);
+        await handleMessage(text, from, "instagram");
+      } else {
+        res.sendStatus(200);
+      }
+    } else {
+      res.sendStatus(200);
+    }
+    return;
+  }
 
-  if (!message || message.type !== "text") return res.sendStatus(200);
+  res.sendStatus(404);
+});
 
-  const from = message.from;
-  const text = message.text.body;
-
-  console.log(`📩 Mensaje de ${from}: ${text}`);
-
-  // Responder a Meta inmediatamente para evitar timeout
-  res.sendStatus(200);
-
+// ─── Manejo central de mensajes ───────────────────────────────────────────────
+async function handleMessage(text, from, platform) {
   try {
     // 1. Disparar el agente de Relevance AI
     const triggerRes = await fetch(
@@ -70,21 +95,21 @@ app.post("/webhook", async (req, res) => {
 
     if (!studioId || !jobId) {
       console.error("❌ No se obtuvo studio_id o job_id");
-      await sendWhatsAppMessage(from, "Lo siento, hubo un error al procesar tu mensaje.");
+      await sendMessage(from, "Lo siento, hubo un error al procesar tu mensaje.", platform);
       return;
     }
 
     // 2. Polling para obtener la respuesta
     const agentReply = await pollForReply(studioId, jobId);
 
-    // 3. Enviar respuesta por WhatsApp
-    await sendWhatsAppMessage(from, agentReply);
+    // 3. Enviar respuesta según plataforma
+    await sendMessage(from, agentReply, platform);
 
   } catch (err) {
     console.error("❌ Error:", err.message);
-    await sendWhatsAppMessage(from, "Ocurrió un error. Intenta de nuevo.");
+    await sendMessage(from, "Ocurrió un error. Intenta de nuevo.", platform);
   }
-});
+}
 
 // ─── Polling usando async_poll ────────────────────────────────────────────────
 async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) {
@@ -95,15 +120,12 @@ async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) 
 
     try {
       const res = await fetch(url, {
-        headers: {
-          Authorization: RELEVANCE_API_KEY,
-        },
+        headers: { Authorization: RELEVANCE_API_KEY },
       });
 
       const data = await res.json();
       console.log(`🔄 Intento ${i + 1}:`, JSON.stringify(data).substring(0, 300));
 
-      // Buscar respuesta en updates
       const updates = data?.updates || [];
       for (const update of updates) {
         if (update?.type === "chain-success") {
@@ -118,13 +140,9 @@ async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) 
         }
       }
 
-      // Si está completo pero sin respuesta clara
       if (data?.type === "chain-success" || data?.status === "complete") {
         const output = data?.output?.output?.answer || data?.output?.answer || data?.output;
-        if (output && typeof output === "string") {
-          console.log("✅ Respuesta obtenida:", output);
-          return output;
-        }
+        if (output && typeof output === "string") return output;
       }
 
     } catch (err) {
@@ -135,10 +153,18 @@ async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) 
   return "Lo siento, el agente tardó demasiado en responder. Intenta de nuevo.";
 }
 
-// ─── Función para enviar mensajes por WhatsApp ────────────────────────────────
+// ─── Enviar mensaje según plataforma ─────────────────────────────────────────
+async function sendMessage(to, text, platform) {
+  if (platform === "whatsapp") {
+    await sendWhatsAppMessage(to, text);
+  } else if (platform === "instagram") {
+    await sendInstagramMessage(to, text);
+  }
+}
+
+// ─── WhatsApp ─────────────────────────────────────────────────────────────────
 async function sendWhatsAppMessage(to, text) {
   const url = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
-
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -152,10 +178,26 @@ async function sendWhatsAppMessage(to, text) {
       text: { body: text },
     }),
   });
-
   const data = await response.json();
-  console.log("📤 Mensaje enviado:", JSON.stringify(data));
-  return data;
+  console.log("📤 WhatsApp enviado:", JSON.stringify(data));
+}
+
+// ─── Instagram ────────────────────────────────────────────────────────────────
+async function sendInstagramMessage(to, text) {
+  const url = `https://graph.facebook.com/v19.0/me/messages`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${INSTAGRAM_TOKEN}`,
+    },
+    body: JSON.stringify({
+      recipient: { id: to },
+      message: { text },
+    }),
+  });
+  const data = await response.json();
+  console.log("📤 Instagram enviado:", JSON.stringify(data));
 }
 
 // ─── Servidor ─────────────────────────────────────────────────────────────────
