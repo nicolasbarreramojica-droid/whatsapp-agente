@@ -10,6 +10,10 @@ const INSTAGRAM_TOKEN = process.env.INSTAGRAM_TOKEN;
 const RELEVANCE_API_KEY = process.env.RELEVANCE_API_KEY;
 const RELEVANCE_AGENT_ID = process.env.RELEVANCE_AGENT_ID;
 
+// ─── Memoria de conversaciones (por número de teléfono) ──────────────────────
+// Guarda conversation_id por usuario para mantener contexto
+const conversaciones = {};
+
 // ─── Verificación del webhook (GET) ──────────────────────────────────────────
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -47,8 +51,7 @@ app.post("/webhook", async (req, res) => {
 
   // ── Instagram ─────────────────────────────────────────────────────────────
   if (body.object === "instagram") {
-    const entry = body.entry?.[0];
-    const messaging = entry?.messaging?.[0];
+    const messaging = body.entry?.[0]?.messaging?.[0];
     if (messaging && messaging.message && !messaging.message.is_echo) {
       const from = messaging.sender.id;
       const text = messaging.message.text;
@@ -71,7 +74,26 @@ app.post("/webhook", async (req, res) => {
 // ─── Manejo central de mensajes ───────────────────────────────────────────────
 async function handleMessage(text, from, platform) {
   try {
+    // Recuperar conversation_id existente o crear uno nuevo
+    const conversationId = conversaciones[from] || null;
+
+    if (conversationId) {
+      console.log(`🔁 Conversación existente para ${from}: ${conversationId}`);
+    } else {
+      console.log(`🆕 Nueva conversación para ${from}`);
+    }
+
     // 1. Disparar el agente de Relevance AI
+    const triggerBody = {
+      agent_id: RELEVANCE_AGENT_ID,
+      message: { role: "user", content: text },
+    };
+
+    // Si hay conversación previa, la incluimos para mantener contexto
+    if (conversationId) {
+      triggerBody.conversation_id = conversationId;
+    }
+
     const triggerRes = await fetch(
       "https://api-bcbe5a.stack.tryrelevance.com/latest/agents/trigger",
       {
@@ -80,10 +102,7 @@ async function handleMessage(text, from, platform) {
           "Content-Type": "application/json",
           Authorization: RELEVANCE_API_KEY,
         },
-        body: JSON.stringify({
-          agent_id: RELEVANCE_AGENT_ID,
-          message: { role: "user", content: text },
-        }),
+        body: JSON.stringify(triggerBody),
       }
     );
 
@@ -92,6 +111,13 @@ async function handleMessage(text, from, platform) {
 
     const studioId = triggerData?.job_info?.studio_id;
     const jobId = triggerData?.job_info?.job_id;
+    const newConversationId = triggerData?.conversation_id;
+
+    // Guardar conversation_id para el próximo mensaje
+    if (newConversationId) {
+      conversaciones[from] = newConversationId;
+      console.log(`💾 Conversación guardada para ${from}: ${newConversationId}`);
+    }
 
     if (!studioId || !jobId) {
       console.error("❌ No se obtuvo studio_id o job_id");
