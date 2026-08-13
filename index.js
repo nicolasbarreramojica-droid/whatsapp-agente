@@ -8,27 +8,12 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const INSTAGRAM_TOKEN = process.env.INSTAGRAM_TOKEN;
 const RELEVANCE_API_KEY = process.env.RELEVANCE_API_KEY;
-const RELEVANCE_AGENT_ID = process.env.RELEVANCE_AGENT_ID;         // Agente apartamentos
-const RELEVANCE_TOURS_AGENT_ID = process.env.RELEVANCE_TOURS_AGENT_ID; // Agente tours
+const RELEVANCE_AGENT_ID = process.env.RELEVANCE_AGENT_ID;
+const RELEVANCE_TOURS_AGENT_ID = process.env.RELEVANCE_TOURS_AGENT_ID;
 
-// ─── Palabras clave para detectar consultas de tours ─────────────────────────
-const TOUR_KEYWORDS = [
-  "tour", "tours", "excursion", "excursión", "isla", "islas", "actividad",
-  "actividades", "paseo", "paseos", "playa", "playas", "buceo", "snorkel",
-  "experiencia", "experiencias", "mambo", "rosario", "totumo", "aviario",
-  "oceanario", "flamingo", "golden hour", "city tour", "chiva", "pub crawl",
-  "lancha", "baru", "barú", "plancton", "cata", "ron"
-];
-
-// ─── Memoria de conversaciones (por usuario) ──────────────────────────────────
-const conversaciones = {};      // conversation_id por usuario
-const agentesActivos = {};      // qué agente está usando cada usuario
-
-// ─── Detectar si es consulta de tours ────────────────────────────────────────
-function esTour(texto) {
-  const textoLower = texto.toLowerCase();
-  return TOUR_KEYWORDS.some(keyword => textoLower.includes(keyword));
-}
+// ─── Memoria de conversaciones ────────────────────────────────────────────────
+const conversaciones = {};
+const agentesActivos = {};
 
 // ─── Verificación del webhook (GET) ──────────────────────────────────────────
 app.get("/webhook", (req, res) => {
@@ -90,30 +75,14 @@ app.post("/webhook", async (req, res) => {
 // ─── Manejo central de mensajes ───────────────────────────────────────────────
 async function handleMessage(text, from, platform) {
   try {
-    // Detectar qué agente usar
-    let agentId;
-    let tipoAgente;
+    // Determinar qué agente usar
+    const agenteActual = agentesActivos[from] || "apartamentos";
+    const agentId = agenteActual === "tours" ? RELEVANCE_TOURS_AGENT_ID : RELEVANCE_AGENT_ID;
 
-    // Si el usuario ya está en una conversación activa, continuar con ese agente
-    if (agentesActivos[from]) {
-      agentId = agentesActivos[from];
-      tipoAgente = agentId === RELEVANCE_TOURS_AGENT_ID ? "tours" : "apartamentos";
-      console.log(`🔁 Continuando con agente de ${tipoAgente} para ${from}`);
-    } else {
-      // Primera vez o nuevo tema — detectar por palabras clave
-      if (esTour(text)) {
-        agentId = RELEVANCE_TOURS_AGENT_ID;
-        tipoAgente = "tours";
-      } else {
-        agentId = RELEVANCE_AGENT_ID;
-        tipoAgente = "apartamentos";
-      }
-      agentesActivos[from] = agentId;
-      console.log(`🆕 Nuevo agente de ${tipoAgente} para ${from}`);
-    }
+    console.log(`🤖 Usando agente de ${agenteActual} para ${from}`);
 
     // Recuperar conversation_id existente
-    const conversationKey = `${from}_${tipoAgente}`;
+    const conversationKey = `${from}_${agenteActual}`;
     const conversationId = conversaciones[conversationKey] || null;
 
     // 1. Disparar el agente
@@ -139,13 +108,12 @@ async function handleMessage(text, from, platform) {
     );
 
     const triggerData = await triggerRes.json();
-    console.log(`🚀 Agente ${tipoAgente} disparado:`, JSON.stringify(triggerData));
+    console.log(`🚀 Agente disparado:`, JSON.stringify(triggerData));
 
     const studioId = triggerData?.job_info?.studio_id;
     const jobId = triggerData?.job_info?.job_id;
     const newConversationId = triggerData?.conversation_id;
 
-    // Guardar conversation_id
     if (newConversationId) {
       conversaciones[conversationKey] = newConversationId;
     }
@@ -157,9 +125,18 @@ async function handleMessage(text, from, platform) {
     }
 
     // 2. Polling para obtener la respuesta
-    const agentReply = await pollForReply(studioId, jobId);
+    let agentReply = await pollForReply(studioId, jobId);
 
-    // 3. Enviar respuesta
+    // 3. Detectar señal de transferencia a tours
+    if (agentReply.includes("CAMBIAR_A_TOURS")) {
+      console.log(`🔀 Transfiriendo a agente de tours para ${from}`);
+      agentesActivos[from] = "tours";
+
+      // Limpiar mensaje — quitar la señal interna
+      agentReply = agentReply.replace("CAMBIAR_A_TOURS", "").trim();
+    }
+
+    // 4. Enviar respuesta
     await sendMessage(from, agentReply, platform);
 
   } catch (err) {
