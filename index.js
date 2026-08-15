@@ -131,12 +131,19 @@ async function handleMessage(text, from, platform) {
     if (agentReply.includes("CAMBIAR_A_TOURS")) {
       console.log(`🔀 Transfiriendo a agente de tours para ${from}`);
       agentesActivos[from] = "tours";
-
-      // Limpiar mensaje — quitar la señal interna
+      delete conversaciones[`${from}_tours`];
       agentReply = agentReply.replace("CAMBIAR_A_TOURS", "").trim();
     }
 
-    // 4. Enviar respuesta
+    // 4. Detectar señal de regreso a apartamentos
+    if (agentReply.includes("CAMBIAR_A_APARTAMENTOS")) {
+      console.log(`🔀 Regresando a agente de apartamentos para ${from}`);
+      agentesActivos[from] = "apartamentos";
+      delete conversaciones[`${from}_apartamentos`];
+      agentReply = agentReply.replace("CAMBIAR_A_APARTAMENTOS", "").trim();
+    }
+
+    // 5. Enviar respuesta
     await sendMessage(from, agentReply, platform);
 
   } catch (err) {
