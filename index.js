@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 const app = express();
 app.use(express.json());
 
@@ -10,6 +11,8 @@ const INSTAGRAM_TOKEN = process.env.INSTAGRAM_TOKEN;
 const RELEVANCE_API_KEY = process.env.RELEVANCE_API_KEY;
 const RELEVANCE_AGENT_ID = process.env.RELEVANCE_AGENT_ID;
 const RELEVANCE_TOURS_AGENT_ID = process.env.RELEVANCE_TOURS_AGENT_ID;
+const BOLD_API_KEY = process.env.BOLD_API_KEY;
+const BOLD_SECRET_KEY = process.env.BOLD_SECRET_KEY;
 
 // ─── Memoria de conversaciones ────────────────────────────────────────────────
 const conversaciones = {};
@@ -29,6 +32,50 @@ app.get("/webhook", (req, res) => {
     res.sendStatus(403);
   }
 });
+
+// ─── Crear link de pago en Bold ───────────────────────────────────────────────
+async function crearLinkBold(monto, descripcion, referencia) {
+  try {
+    const orderId = referencia || `CSV-${Date.now()}`;
+    const currency = "COP";
+    const amountInCents = Math.round(monto * 100);
+
+    // Generar firma de integridad
+    const integrity = crypto
+      .createHash("sha256")
+      .update(`${orderId}${amountInCents}${currency}${BOLD_SECRET_KEY}`)
+      .digest("hex");
+
+    const response = await fetch("https://api.bold.co/online/link/v1", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `x-api-key ${BOLD_API_KEY}`,
+      },
+      body: JSON.stringify({
+        amount: {
+          currency,
+          total_amount: amountInCents,
+        },
+        description: descripcion || "Reserva Cartagena Stay Venture",
+        order_id: orderId,
+        payment_methods: ["CARD"],
+        integrity_signature: integrity,
+      }),
+    });
+
+    const data = await response.json();
+    console.log("💳 Link Bold creado:", JSON.stringify(data));
+
+    if (data?.payload?.url) {
+      return data.payload.url;
+    }
+    return null;
+  } catch (err) {
+    console.error("❌ Error creando link Bold:", err.message);
+    return null;
+  }
+}
 
 // ─── Recepción de mensajes (POST) ────────────────────────────────────────────
 app.post("/webhook", async (req, res) => {
@@ -72,20 +119,30 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(404);
 });
 
+// ─── Endpoint para crear link de pago Bold ────────────────────────────────────
+app.post("/crear-pago", async (req, res) => {
+  const { monto, descripcion, referencia } = req.body;
+  if (!monto) return res.status(400).json({ error: "Monto requerido" });
+
+  const link = await crearLinkBold(monto, descripcion, referencia);
+  if (link) {
+    res.json({ link });
+  } else {
+    res.status(500).json({ error: "No se pudo crear el link de pago" });
+  }
+});
+
 // ─── Manejo central de mensajes ───────────────────────────────────────────────
 async function handleMessage(text, from, platform) {
   try {
-    // Determinar qué agente usar
     const agenteActual = agentesActivos[from] || "apartamentos";
     const agentId = agenteActual === "tours" ? RELEVANCE_TOURS_AGENT_ID : RELEVANCE_AGENT_ID;
 
     console.log(`🤖 Usando agente de ${agenteActual} para ${from}`);
 
-    // Recuperar conversation_id existente
     const conversationKey = `${from}_${agenteActual}`;
     const conversationId = conversaciones[conversationKey] || null;
 
-    // 1. Disparar el agente
     const triggerBody = {
       agent_id: agentId,
       message: { role: "user", content: text },
@@ -124,10 +181,24 @@ async function handleMessage(text, from, platform) {
       return;
     }
 
-    // 2. Polling para obtener la respuesta
     let agentReply = await pollForReply(studioId, jobId);
 
-    // 3. Detectar señal de transferencia a tours
+    // Detectar señal de crear link Bold
+    const boldMatch = agentReply.match(/CREAR_PAGO_BOLD\((\d+),([^,]+),([^)]+)\)/);
+    if (boldMatch) {
+      const monto = parseInt(boldMatch[1]);
+      const descripcion = boldMatch[2].trim();
+      const referencia = boldMatch[3].trim();
+      console.log(`💳 Creando link Bold: ${monto} COP`);
+      const linkBold = await crearLinkBold(monto, descripcion, referencia);
+      if (linkBold) {
+        agentReply = agentReply.replace(boldMatch[0], `\n💳 *Link de pago con tarjeta:*\n${linkBold}`);
+      } else {
+        agentReply = agentReply.replace(boldMatch[0], "");
+      }
+    }
+
+    // Detectar señal de transferencia a tours
     if (agentReply.includes("CAMBIAR_A_TOURS")) {
       console.log(`🔀 Transfiriendo a agente de tours para ${from}`);
       agentesActivos[from] = "tours";
@@ -135,7 +206,7 @@ async function handleMessage(text, from, platform) {
       agentReply = agentReply.replace("CAMBIAR_A_TOURS", "").trim();
     }
 
-    // 4. Detectar señal de regreso a apartamentos
+    // Detectar señal de regreso a apartamentos
     if (agentReply.includes("CAMBIAR_A_APARTAMENTOS")) {
       console.log(`🔀 Regresando a agente de apartamentos para ${from}`);
       agentesActivos[from] = "apartamentos";
@@ -143,7 +214,6 @@ async function handleMessage(text, from, platform) {
       agentReply = agentReply.replace("CAMBIAR_A_APARTAMENTOS", "").trim();
     }
 
-    // 5. Enviar respuesta
     await sendMessage(from, agentReply, platform);
 
   } catch (err) {
