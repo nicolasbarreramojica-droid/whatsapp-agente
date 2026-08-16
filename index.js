@@ -46,21 +46,22 @@ async function crearLinkBold(monto, descripcion, referencia) {
       .update(`${orderId}${amountInCents}${currency}${BOLD_SECRET_KEY}`)
       .digest("hex");
 
-    const response = await fetch("https://api.bold.co/online/link/v1", {
+    const response = await fetch("https://integrations.api.bold.co/online/link/v1", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `x-api-key ${BOLD_API_KEY}`,
       },
       body: JSON.stringify({
+        amount_type: "CLOSE",
         amount: {
           currency,
           total_amount: amountInCents,
+          tip_amount: 0,
         },
         description: descripcion || "Reserva Cartagena Stay Venture",
-        order_id: orderId,
-        payment_methods: ["CARD"],
-        integrity_signature: integrity,
+        reference: orderId,
+        payment_methods: ["CREDIT_CARD"],
       }),
     });
 
@@ -124,7 +125,7 @@ app.post("/webhook", async (req, res) => {
 app.get("/test-bold", async (req, res) => {
   try {
     console.log("🧪 Probando conexión a Bold...");
-    const response = await fetch("https://api.bold.co/online/link/v1/payment_methods", {
+    const response = await fetch("https://integrations.api.bold.co/online/link/v1/payment_methods", {
       method: "GET",
       headers: {
         Authorization: `x-api-key ${BOLD_API_KEY}`,
