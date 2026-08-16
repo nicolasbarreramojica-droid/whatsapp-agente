@@ -73,6 +73,7 @@ async function crearLinkBold(monto, descripcion, referencia) {
     return null;
   } catch (err) {
     console.error("❌ Error creando link Bold:", err.message);
+    console.error("❌ Error completo Bold:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
     return null;
   }
 }
@@ -119,7 +120,24 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(404);
 });
 
-// ─── Endpoint para crear link de pago Bold ────────────────────────────────────
+// ─── Endpoint de prueba Bold ──────────────────────────────────────────────────
+app.get("/test-bold", async (req, res) => {
+  try {
+    console.log("🧪 Probando conexión a Bold...");
+    const response = await fetch("https://api.bold.co/online/link/v1/payment_methods", {
+      method: "GET",
+      headers: {
+        Authorization: `x-api-key ${BOLD_API_KEY}`,
+      },
+    });
+    const text = await response.text();
+    console.log("✅ Bold responde:", text.substring(0, 200));
+    res.json({ status: response.status, body: text.substring(0, 200) });
+  } catch (err) {
+    console.error("❌ Bold no responde:", err.message, err.cause?.message);
+    res.json({ error: err.message, cause: err.cause?.message });
+  }
+});
 app.post("/crear-pago", async (req, res) => {
   const { monto, descripcion, referencia } = req.body;
   if (!monto) return res.status(400).json({ error: "Monto requerido" });
