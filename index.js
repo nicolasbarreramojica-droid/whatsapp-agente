@@ -38,7 +38,7 @@ async function crearLinkBold(monto, descripcion, referencia) {
   try {
     const orderId = referencia || `CSV-${Date.now()}`;
     const currency = "COP";
-    const amountInCents = Math.round(monto * 100);
+    const amountInCents = Math.round(monto);
 
     // Generar firma de integridad
     const integrity = crypto
