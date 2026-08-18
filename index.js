@@ -40,7 +40,6 @@ async function crearLinkBold(monto, descripcion, referencia) {
     const currency = "COP";
     const amountInCents = Math.round(monto);
 
-    // Generar firma de integridad
     const integrity = crypto
       .createHash("sha256")
       .update(`${orderId}${amountInCents}${currency}${BOLD_SECRET_KEY}`)
@@ -54,11 +53,7 @@ async function crearLinkBold(monto, descripcion, referencia) {
       },
       body: JSON.stringify({
         amount_type: "CLOSE",
-        amount: {
-          currency,
-          total_amount: amountInCents,
-          tip_amount: 0,
-        },
+        amount: { currency, total_amount: amountInCents, tip_amount: 0 },
         description: descripcion || "Reserva Cartagena Stay Venture",
         reference: orderId,
         payment_methods: ["CREDIT_CARD"],
@@ -67,11 +62,7 @@ async function crearLinkBold(monto, descripcion, referencia) {
 
     const data = await response.json();
     console.log("💳 Link Bold creado:", JSON.stringify(data));
-
-    if (data?.payload?.url) {
-      return data.payload.url;
-    }
-    return null;
+    return data?.payload?.url || null;
   } catch (err) {
     console.error("❌ Error creando link Bold:", err.message);
     console.error("❌ Error completo Bold:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
@@ -124,31 +115,23 @@ app.post("/webhook", async (req, res) => {
 // ─── Endpoint de prueba Bold ──────────────────────────────────────────────────
 app.get("/test-bold", async (req, res) => {
   try {
-    console.log("🧪 Probando conexión a Bold...");
     const response = await fetch("https://integrations.api.bold.co/online/link/v1/payment_methods", {
       method: "GET",
-      headers: {
-        Authorization: `x-api-key ${BOLD_API_KEY}`,
-      },
+      headers: { Authorization: `x-api-key ${BOLD_API_KEY}` },
     });
     const text = await response.text();
-    console.log("✅ Bold responde:", text.substring(0, 200));
     res.json({ status: response.status, body: text.substring(0, 200) });
   } catch (err) {
-    console.error("❌ Bold no responde:", err.message, err.cause?.message);
     res.json({ error: err.message, cause: err.cause?.message });
   }
 });
+
+// ─── Endpoint para crear link de pago Bold ────────────────────────────────────
 app.post("/crear-pago", async (req, res) => {
   const { monto, descripcion, referencia } = req.body;
   if (!monto) return res.status(400).json({ error: "Monto requerido" });
-
   const link = await crearLinkBold(monto, descripcion, referencia);
-  if (link) {
-    res.json({ link });
-  } else {
-    res.status(500).json({ error: "No se pudo crear el link de pago" });
-  }
+  link ? res.json({ link }) : res.status(500).json({ error: "No se pudo crear el link de pago" });
 });
 
 // ─── Manejo central de mensajes ───────────────────────────────────────────────
@@ -241,9 +224,12 @@ async function handleMessage(text, from, platform) {
   }
 }
 
-// ─── Polling usando async_poll ────────────────────────────────────────────────
-async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) {
+// ─── Polling mejorado — espera que el agente termine TODAS las herramientas ───
+async function pollForReply(studioId, jobId, maxAttempts = 60, interval = 3000) {
   const url = `https://api-bcbe5a.stack.tryrelevance.com/latest/studios/${studioId}/async_poll/${jobId}`;
+
+  let lastAnswer = "";
+  let completedAt = null;
 
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(resolve => setTimeout(resolve, interval));
@@ -254,7 +240,7 @@ async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) 
       });
 
       const data = await res.json();
-      console.log(`🔄 Intento ${i + 1}:`, JSON.stringify(data).substring(0, 300));
+      console.log(`🔄 Intento ${i + 1} - type: ${data?.type}`);
 
       const updates = data?.updates || [];
       for (const update of updates) {
@@ -264,15 +250,23 @@ async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) 
                         update?.output?.text ||
                         update?.output;
           if (output && typeof output === "string") {
-            console.log("✅ Respuesta obtenida:", output);
-            return output;
+            lastAnswer = output;
+            console.log("📝 Respuesta parcial guardada:", output.substring(0, 100));
           }
         }
       }
 
-      if (data?.type === "chain-success" || data?.status === "complete") {
-        const output = data?.output?.output?.answer || data?.output?.answer || data?.output;
-        if (output && typeof output === "string") return output;
+      // Cuando complete, esperar 2 rondas más para que terminen email y Sheets
+      if (data?.type === "complete" || data?.status === "complete") {
+        if (!completedAt) {
+          completedAt = i;
+          console.log(`✅ Agente completó en intento ${i + 1} — esperando rondas adicionales`);
+        } else if (i - completedAt >= 2) {
+          if (lastAnswer) {
+            console.log("✅ Respuesta final:", lastAnswer.substring(0, 200));
+            return lastAnswer;
+          }
+        }
       }
 
     } catch (err) {
@@ -280,7 +274,7 @@ async function pollForReply(studioId, jobId, maxAttempts = 30, interval = 2000) 
     }
   }
 
-  return "Lo siento, el agente tardó demasiado en responder. Intenta de nuevo.";
+  return lastAnswer || "Lo siento, el agente tardó demasiado en responder. Intenta de nuevo.";
 }
 
 // ─── Enviar mensaje según plataforma ─────────────────────────────────────────
