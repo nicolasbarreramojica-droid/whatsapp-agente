@@ -17,6 +17,27 @@ const BOLD_SECRET_KEY = process.env.BOLD_SECRET_KEY;
 // ─── Memoria de conversaciones ────────────────────────────────────────────────
 const conversaciones = {};
 const agentesActivos = {};
+const usuariosNuevos = new Set();
+
+// ─── Mensaje de bienvenida ───────────────────────────────────────────────────
+const MENSAJE_BIENVENIDA = `¡Hola! 🌴 Gracias por escribir a *Cartagena Stay Venture*, tu refugio en Cartagena, donde una gran experiencia comienza aquí ⛵🏖️☀️
+
+Te ayudamos con:
+
+🏠 *Alojamiento* — Apartamentos turísticos a pasos de la playa, con piscina en la azotea y gimnasio. Muy bien ubicados cerca de la playa, el aeropuerto y el centro histórico.
+_(Torre Primis · 3 hab · y Edificio Acualina · 2 hab)_
+
+⛵ *Tours y experiencias* — Islas del Rosario, Mambo Beach, Volcán del Totumo, plancton bioluminiscente, cultura y más.
+🚁 *Tours en helicóptero* — Vive Cartagena desde el aire con una vista espectacular de la ciudad amurallada, el mar Caribe y las islas. Una experiencia única e inolvidable.
+
+Para darte la mejor opción, cuéntanos:
+📅 Fechas
+👥 Número de personas
+✨ ¿Alojamiento, tours o ambos?
+
+Dame tus fechas aproximadas y te doy disponibilidad y precio al instante.
+
+¡Bienvenido/a al Caribe colombiano! ☀️`;
 
 // ─── Health check para UptimeRobot ───────────────────────────────────────────
 app.get("/health", (req, res) => {
@@ -88,6 +109,32 @@ app.post("/webhook", async (req, res) => {
       const text = message.text.body;
       console.log(`📩 WhatsApp de ${from}: ${text}`);
       res.sendStatus(200);
+      // Enviar bienvenida si es la primera vez
+      if (!usuariosNuevos.has(from)) {
+        usuariosNuevos.add(from);
+        await sendWhatsAppMessage(from, MENSAJE_BIENVENIDA);
+      }
+
+      // Mensaje intermedio según contexto
+      const textoLower = text.toLowerCase();
+      let mensajeIntermedio = "⏳ Dame un momento, estoy procesando tu mensaje...";
+
+      if (textoLower.includes("disponib") || textoLower.includes("fecha") || textoLower.includes("reserv")) {
+        mensajeIntermedio = "🔍 Estoy verificando la disponibilidad para esas fechas. Dame un momento, por favor.";
+      } else if (textoLower.includes("precio") || textoLower.includes("costo") || textoLower.includes("cuánto") || textoLower.includes("cuanto")) {
+        mensajeIntermedio = "💰 Estoy calculando el precio para ti. Dame un momento, por favor.";
+      } else if (textoLower.includes("tour") || textoLower.includes("isla") || textoLower.includes("excursion") || textoLower.includes("experiencia") || textoLower.includes("helicoptero") || textoLower.includes("helicóptero")) {
+        mensajeIntermedio = "🌴 Estoy revisando las opciones de tours disponibles para ti. Dame un momento, por favor.";
+      } else if (textoLower.includes("pago") || textoLower.includes("nequi") || textoLower.includes("transferencia") || textoLower.includes("tarjeta") || textoLower.includes("daviplata")) {
+        mensajeIntermedio = "💳 Estoy procesando la información de pago. Dame un momento, por favor.";
+      } else {
+        mensajeIntermedio = "⏳ Estoy trabajando en tu solicitud. Dame un momento, por favor.";
+      }
+
+      setTimeout(async () => {
+        await sendWhatsAppMessage(from, mensajeIntermedio);
+      }, 4000);
+
       await handleMessage(text, from, "whatsapp");
     } else {
       res.sendStatus(200);
