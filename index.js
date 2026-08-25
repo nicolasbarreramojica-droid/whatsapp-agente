@@ -18,6 +18,11 @@ const BOLD_SECRET_KEY = process.env.BOLD_SECRET_KEY;
 const conversaciones = {};
 const agentesActivos = {};
 
+// ─── Health check para UptimeRobot ───────────────────────────────────────────
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", message: "Servidor activo 🚀" });
+});
+
 // ─── Verificación del webhook (GET) ──────────────────────────────────────────
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
