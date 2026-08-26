@@ -252,6 +252,17 @@ async function handleMessage(text, from, platform) {
       }
     }
 
+    // Detectar señal de envío de QR Nequi
+    if (agentReply.includes("ENVIAR_QR_NEQUI")) {
+      console.log(`📲 Enviando QR Nequi a ${from}`);
+      agentReply = agentReply.replace("ENVIAR_QR_NEQUI", "").trim();
+      await sendWhatsAppImage(
+        from,
+        "https://raw.githubusercontent.com/nicolasbarreramojica-droid/whatsapp-agente/main/qr_nequi.jpg",
+        "📲 Escanea este QR desde la app de tu banco para pagar fácil y rápido. — Cartagena Stay Venture"
+      );
+    }
+
     // Detectar señal de transferencia a tours
     if (agentReply.includes("CAMBIAR_A_TOURS")) {
       console.log(`🔀 Transfiriendo a agente de tours para ${from}`);
@@ -356,6 +367,30 @@ async function sendWhatsAppMessage(to, text) {
   });
   const data = await response.json();
   console.log("📤 WhatsApp enviado:", JSON.stringify(data));
+}
+
+// ─── Enviar imagen QR por WhatsApp ───────────────────────────────────────────
+async function sendWhatsAppImage(to, imageUrl, caption) {
+  const url = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "image",
+      image: {
+        link: imageUrl,
+        caption: caption || "",
+      },
+    }),
+  });
+  const data = await response.json();
+  console.log("📤 Imagen enviada:", JSON.stringify(data));
+  return data;
 }
 
 // ─── Instagram ────────────────────────────────────────────────────────────────
