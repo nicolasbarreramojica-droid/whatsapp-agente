@@ -271,6 +271,37 @@ async function handleMessage(text, from, platform) {
       agentReply = agentReply.replace("CAMBIAR_A_TOURS", "").trim();
     }
 
+    // Detectar señal de aviso de tour/paquete
+    const avisoMatch = agentReply.match(/AVISO_TOUR\(([^)]+)\)/);
+    if (avisoMatch) {
+      const datos = avisoMatch[1].split(",");
+      const nombre = datos[0]?.trim() || "N/A";
+      const tour = datos[1]?.trim() || "N/A";
+      const fecha = datos[2]?.trim() || "N/A";
+      const personas = datos[3]?.trim() || "N/A";
+      const telefono = datos[4]?.trim() || "N/A";
+
+      const mensajeAviso = `🔔 *Nueva reserva pendiente de confirmar:*
+
+` +
+        `🌴 Tour/Paquete: ${tour}
+` +
+        `👤 Cliente: ${nombre}
+` +
+        `📅 Fecha: ${fecha}
+` +
+        `👥 Personas: ${personas}
+` +
+        `📱 Teléfono: ${telefono}
+
+` +
+        `⚠️ Verificar disponibilidad con proveedor y confirmar al cliente.`;
+
+      console.log(`🔔 Enviando aviso a número personal: ${mensajeAviso}`);
+      await sendWhatsAppMessage("573222810384", mensajeAviso);
+      agentReply = agentReply.replace(avisoMatch[0], "").trim();
+    }
+
     // Detectar señal de regreso a apartamentos
     if (agentReply.includes("CAMBIAR_A_APARTAMENTOS")) {
       console.log(`🔀 Regresando a agente de apartamentos para ${from}`);
