@@ -207,6 +207,22 @@ async function handleMessage(text, from, platform) {
       agenteActual = "tours";
     }
 
+    // Si es confirmación de pago → redirigir al agente correcto según booking_id
+    if (text.startsWith("🔑 PAGO CONFIRMADO:")) {
+      console.log(`💰 Confirmación de pago recibida: ${text}`);
+      const bookingId = text.replace("🔑 PAGO CONFIRMADO:", "").trim();
+      // Si el booking_id empieza con TOUR → agente de tours
+      if (bookingId.startsWith("TOUR-")) {
+        agentId = RELEVANCE_TOURS_AGENT_ID;
+        agenteActual = "tours";
+        console.log(`🌴 Redirigiendo confirmación al Agente de Tours`);
+      } else {
+        agentId = RELEVANCE_AGENT_ID;
+        agenteActual = "apartamentos";
+        console.log(`🏠 Redirigiendo confirmación al Agente de Apartamentos`);
+      }
+    }
+
     console.log(`🤖 Usando agente de ${agenteActual} para ${from}`);
 
     const conversationKey = `${from}_${agenteActual}`;
