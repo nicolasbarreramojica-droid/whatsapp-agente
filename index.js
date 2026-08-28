@@ -50,22 +50,16 @@ async function actualizarDisponibilidadSheets(tours, fecha) {
     const toursExistentes = filas.slice(0).map(f => f[0]);
     
     // Preparar nuevas filas
-    const nuevasFilas = tours.map(tour => [tour, "DISPONIBLE", fecha]);
+    const nuevasFilas = tours.map(tour => [tour, "SI", fecha]);
     
-    // Tours existentes no mencionados → NO DISPONIBLE
+    // Tours existentes no mencionados → NO
     const toursNoMencionados = toursExistentes
       .filter(t => t && !tours.includes(t))
-      .map(t => [t, "NO DISPONIBLE", fecha]);
-
-    // Limpiar y reescribir desde fila 9 (encabezados en fila 8)
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A9:C:clear`,
-      { method: "POST", headers: { Authorization: `Bearer ${token}` } }
-    );
+      .map(t => [t, "NO", fecha]);
 
     // Escribir todos los tours desde fila 9
     const todosLosTours = [...nuevasFilas, ...toursNoMencionados];
-    await fetch(
+    const writeRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A9:C?valueInputOption=USER_ENTERED`,
       {
         method: "PUT",
@@ -73,6 +67,8 @@ async function actualizarDisponibilidadSheets(tours, fecha) {
         body: JSON.stringify({ values: todosLosTours })
       }
     );
+    const writeData = await writeRes.json();
+    console.log("📊 Respuesta Sheets:", JSON.stringify(writeData));
 
     console.log(`✅ Disponibilidad actualizada en Sheets: ${tours.join(", ")}`);
     return true;
