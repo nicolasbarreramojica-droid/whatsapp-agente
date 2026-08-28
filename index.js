@@ -117,9 +117,11 @@ app.post("/webhook", async (req, res) => {
 
       // No enviar mensaje intermedio si es actualización de Next Tour
       if (text.startsWith("📢 NEXXTOURS TE INFORMA QUE:")) {
+        console.log(`📢 Detectado mensaje Next Tour de ${from}`);
         await handleMessage(text, from, "whatsapp");
         return;
       }
+      console.log(`📝 Procesando mensaje normal de ${from}: ${text.substring(0, 50)}`);
 
       // Mensaje intermedio según contexto
       const textoLower = text.toLowerCase();
