@@ -3,6 +3,85 @@ const crypto = require("crypto");
 const app = express();
 app.use(express.json());
 
+// ─── Google Sheets via Service Account ───────────────────────────────────────
+async function getGoogleAccessToken() {
+  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+  const now = Math.floor(Date.now() / 1000);
+  
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({
+    iss: credentials.client_email,
+    scope: "https://www.googleapis.com/auth/spreadsheets",
+    aud: "https://oauth2.googleapis.com/token",
+    exp: now + 3600,
+    iat: now
+  })).toString("base64url");
+
+  const { createSign } = require("crypto");
+  const sign = createSign("RSA-SHA256");
+  sign.update(`${header}.${payload}`);
+  const signature = sign.sign(credentials.private_key, "base64url");
+  const jwt = `${header}.${payload}.${signature}`;
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`
+  });
+  const data = await response.json();
+  return data.access_token;
+}
+
+async function actualizarDisponibilidadSheets(tours, fecha) {
+  try {
+    const token = await getGoogleAccessToken();
+    const spreadsheetId = "1eHeji5U4mJc0bAMPFc6MwqVp8AE2xEovbYOuz-6DPSA";
+    const sheetName = "Registro de disponibilidad para toures";
+
+    // Primero leer los tours existentes
+    const readRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A:C`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const readData = await readRes.json();
+    const filas = readData.values || [];
+
+    // Marcar todos como NO DISPONIBLE primero
+    const toursExistentes = filas.slice(1).map(f => f[0]);
+    
+    // Preparar nuevas filas
+    const nuevasFilas = tours.map(tour => [tour, "DISPONIBLE", fecha]);
+    
+    // Tours existentes no mencionados → NO DISPONIBLE
+    const toursNoMencionados = toursExistentes
+      .filter(t => t && !tours.includes(t))
+      .map(t => [t, "NO DISPONIBLE", fecha]);
+
+    // Limpiar y reescribir
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A2:C:clear`,
+      { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    // Escribir todos los tours
+    const todosLosTours = [...nuevasFilas, ...toursNoMencionados];
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A2:C?valueInputOption=USER_ENTERED`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ values: todosLosTours })
+      }
+    );
+
+    console.log(`✅ Disponibilidad actualizada en Sheets: ${tours.join(", ")}`);
+    return true;
+  } catch (err) {
+    console.error("❌ Error actualizando disponibilidad en Sheets:", err.message);
+    return false;
+  }
+}
+
 // ─── Config from environment variables ───────────────────────────────────────
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "mi_token_secreto";
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -118,6 +197,29 @@ app.post("/webhook", async (req, res) => {
       // No enviar mensaje intermedio si es actualización de Next Tour
       if (text.includes("NEXXTOURS")) {
         console.log(`📢 Detectado mensaje Next Tour de ${from}`);
+        
+        // Extraer tours disponibles del mensaje
+        const lineas = text.split("\n");
+        const tours = [];
+        for (const linea of lineas) {
+          if (linea.includes("✅") || linea.includes("disponib")) {
+            const tourNombre = linea
+              .replace(/[✅🚌🚤🌴🪼🦚🤿🦝🌊🐬🌋]/g, "")
+              .replace(/[-*•]/g, "")
+              .trim();
+            if (tourNombre.length > 3) tours.push(tourNombre);
+          }
+        }
+        
+        const fecha = new Date().toISOString().split("T")[0];
+        if (tours.length > 0) {
+          const ok = await actualizarDisponibilidadSheets(tours, fecha);
+          if (ok) {
+            await sendWhatsAppMessage(from, "✅ Disponibilidad de Next Tour actualizada.");
+            return;
+          }
+        }
+        
         await handleMessage(text, from, "whatsapp");
         return;
       }
