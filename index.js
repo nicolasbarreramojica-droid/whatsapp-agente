@@ -116,7 +116,7 @@ app.post("/webhook", async (req, res) => {
       }
 
       // No enviar mensaje intermedio si es actualización de Next Tour
-      if (text.startsWith("📢 NEXXTOURS TE INFORMA QUE:")) {
+      if (text.includes("NEXXTOURS")) {
         console.log(`📢 Detectado mensaje Next Tour de ${from}`);
         await handleMessage(text, from, "whatsapp");
         return;
@@ -201,7 +201,7 @@ async function handleMessage(text, from, platform) {
     let agentId = agenteActual === "tours" ? RELEVANCE_TOURS_AGENT_ID : RELEVANCE_AGENT_ID;
 
     // Si el mensaje es de disponibilidad de Next Tour → redirigir al Agente de Tours
-    if (text.startsWith("📢 NEXXTOURS TE INFORMA QUE:")) {
+    if (text.includes("NEXXTOURS") || text.includes("NEXXTOURS TE INFORMA")) {
       console.log(`📢 Mensaje de disponibilidad Next Tour — redirigiendo al Agente de Tours`);
       agentId = RELEVANCE_TOURS_AGENT_ID;
       agenteActual = "tours";
