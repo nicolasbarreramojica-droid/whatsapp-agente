@@ -115,6 +115,12 @@ app.post("/webhook", async (req, res) => {
         await sendWhatsAppMessage(from, MENSAJE_BIENVENIDA);
       }
 
+      // No enviar mensaje intermedio si es actualización de Next Tour
+      if (text.startsWith("📢 NEXXTOURS TE INFORMA QUE:")) {
+        await handleMessage(text, from, "whatsapp");
+        return;
+      }
+
       // Mensaje intermedio según contexto
       const textoLower = text.toLowerCase();
       let mensajeIntermedio = "⏳ Dame un momento, estoy procesando tu mensaje...";
@@ -189,8 +195,15 @@ app.post("/crear-pago", async (req, res) => {
 // ─── Manejo central de mensajes ───────────────────────────────────────────────
 async function handleMessage(text, from, platform) {
   try {
-    const agenteActual = agentesActivos[from] || "apartamentos";
-    const agentId = agenteActual === "tours" ? RELEVANCE_TOURS_AGENT_ID : RELEVANCE_AGENT_ID;
+    let agenteActual = agentesActivos[from] || "apartamentos";
+    let agentId = agenteActual === "tours" ? RELEVANCE_TOURS_AGENT_ID : RELEVANCE_AGENT_ID;
+
+    // Si el mensaje es de disponibilidad de Next Tour → redirigir al Agente de Tours
+    if (text.startsWith("📢 NEXXTOURS TE INFORMA QUE:")) {
+      console.log(`📢 Mensaje de disponibilidad Next Tour — redirigiendo al Agente de Tours`);
+      agentId = RELEVANCE_TOURS_AGENT_ID;
+      agenteActual = "tours";
+    }
 
     console.log(`🤖 Usando agente de ${agenteActual} para ${from}`);
 
