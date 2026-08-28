@@ -40,14 +40,14 @@ async function actualizarDisponibilidadSheets(tours, fecha) {
 
     // Primero leer los tours existentes
     const readRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A:C`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A9:C`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     const readData = await readRes.json();
     const filas = readData.values || [];
 
     // Marcar todos como NO DISPONIBLE primero
-    const toursExistentes = filas.slice(1).map(f => f[0]);
+    const toursExistentes = filas.slice(0).map(f => f[0]);
     
     // Preparar nuevas filas
     const nuevasFilas = tours.map(tour => [tour, "DISPONIBLE", fecha]);
@@ -57,16 +57,16 @@ async function actualizarDisponibilidadSheets(tours, fecha) {
       .filter(t => t && !tours.includes(t))
       .map(t => [t, "NO DISPONIBLE", fecha]);
 
-    // Limpiar y reescribir
+    // Limpiar y reescribir desde fila 9 (encabezados en fila 8)
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A2:C:clear`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A9:C:clear`,
       { method: "POST", headers: { Authorization: `Bearer ${token}` } }
     );
 
-    // Escribir todos los tours
+    // Escribir todos los tours desde fila 9
     const todosLosTours = [...nuevasFilas, ...toursNoMencionados];
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A2:C?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A9:C?valueInputOption=USER_ENTERED`,
       {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -202,12 +202,16 @@ app.post("/webhook", async (req, res) => {
         const lineas = text.split("\n");
         const tours = [];
         for (const linea of lineas) {
-          if (linea.includes("✅") || linea.includes("disponib")) {
+          if (linea.includes("✅")) {
             const tourNombre = linea
-              .replace(/[✅🚌🚤🌴🪼🦚🤿🦝🌊🐬🌋]/g, "")
+              .replace(/[✅🚌🚤🌴🪼🦚🤿🦝🌊🐬🌋🐢☀️]/gu, "")
               .replace(/[-*•]/g, "")
+              .replace(/\(por tierra.*?\)/gi, "")
+              .replace(/\(por lancha.*?\)/gi, "")
               .trim();
-            if (tourNombre.length > 3) tours.push(tourNombre);
+            if (tourNombre.length > 3 && !tourNombre.toLowerCase().includes("tenemos") && !tourNombre.toLowerCase().includes("disponib")) {
+              tours.push(tourNombre);
+            }
           }
         }
         
