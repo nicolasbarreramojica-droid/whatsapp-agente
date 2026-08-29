@@ -37,8 +37,7 @@ async function actualizarDisponibilidadSheets(tours, fecha) {
     const token = await getGoogleAccessToken();
     const spreadsheetId = "1eHeji5U4mJc0bAMPFc6MwqVp8AE2xEovbYOuz-6DPSA";
     const sheetName = "Registro de disponibilidad para toures";
-    // Usar comillas simples para nombres de hoja con espacios
-    const sheetRange = `'${sheetName}'!A9:C`;
+    const sheetRange = `${sheetName}!A9:C`;
 
     // Primero leer los tours existentes
     const readRes = await fetch(
