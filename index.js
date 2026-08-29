@@ -303,12 +303,7 @@ async function handleMessage(text, from, platform) {
     let agenteActual = agentesActivos[from] || "apartamentos";
     let agentId = agenteActual === "tours" ? RELEVANCE_TOURS_AGENT_ID : RELEVANCE_AGENT_ID;
 
-    // Si el mensaje es de disponibilidad de Next Tour → redirigir al Agente de Tours
-    if (text.includes("NEXXTOURS") || text.includes("NEXXTOURS TE INFORMA")) {
-      console.log(`📢 Mensaje de disponibilidad Next Tour — redirigiendo al Agente de Tours`);
-      agentId = RELEVANCE_TOURS_AGENT_ID;
-      agenteActual = "tours";
-    }
+    // Si el mensaje es de disponibilidad de Next Tour → ya fue procesado en webhook, no redirigir
 
     // Si es confirmación de pago → redirigir al agente correcto según booking_id
     if (text.startsWith("🔑 PAGO CONFIRMADO:")) {
