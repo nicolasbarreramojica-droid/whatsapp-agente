@@ -213,15 +213,34 @@ app.post("/webhook", async (req, res) => {
         }
         
         const fecha = new Date().toISOString().split("T")[0];
+        console.log(`🔍 Tours detectados: ${JSON.stringify(tours)}`);
         if (tours.length > 0) {
           const ok = await actualizarDisponibilidadSheets(tours, fecha);
           if (ok) {
             await sendWhatsAppMessage(from, "✅ Disponibilidad de Next Tour actualizada.");
             return;
           }
+        } else {
+          // Si no encontró tours con ✅, intentar extraer de otra forma
+          const toursAlternativo = [];
+          const lineas2 = text.split("\n");
+          for (const linea of lineas2) {
+            if (linea.includes("-") && linea.length > 5 && !linea.toLowerCase().includes("nexxtours") && !linea.toLowerCase().includes("tenemos") && !linea.toLowerCase().includes("disponib")) {
+              const nombre = linea.replace(/[-*•✅]/g, "").replace(/[🚌🚤🌴🪼🦚🤿🦝🌊🐬🌋🐢☀️]/gu, "").trim();
+              if (nombre.length > 3) toursAlternativo.push(nombre);
+            }
+          }
+          console.log(`🔍 Tours alternativos: ${JSON.stringify(toursAlternativo)}`);
+          if (toursAlternativo.length > 0) {
+            const ok = await actualizarDisponibilidadSheets(toursAlternativo, fecha);
+            if (ok) {
+              await sendWhatsAppMessage(from, "✅ Disponibilidad de Next Tour actualizada.");
+              return;
+            }
+          }
         }
         
-        await handleMessage(text, from, "whatsapp");
+        await sendWhatsAppMessage(from, "✅ Mensaje de Next Tour recibido.");
         return;
       }
       console.log(`📝 Procesando mensaje normal de ${from}: ${text.substring(0, 50)}`);
