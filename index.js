@@ -194,6 +194,7 @@ app.post("/webhook", async (req, res) => {
       // No enviar mensaje intermedio si es actualización de Next Tour
       if (text.includes("NEXXTOURS")) {
         console.log(`📢 Detectado mensaje Next Tour de ${from}`);
+        console.log(`📝 Texto completo: ${JSON.stringify(text)}`);
         
         // Extraer tours disponibles del mensaje
         const lineas = text.split("\n");
