@@ -37,10 +37,12 @@ async function actualizarDisponibilidadSheets(tours, fecha) {
     const token = await getGoogleAccessToken();
     const spreadsheetId = "1eHeji5U4mJc0bAMPFc6MwqVp8AE2xEovbYOuz-6DPSA";
     const sheetName = "Registro de disponibilidad para toures";
+    // Usar comillas simples para nombres de hoja con espacios
+    const sheetRange = `'${sheetName}'!A9:C`;
 
     // Primero leer los tours existentes
     const readRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A9:C`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetRange)}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     const readData = await readRes.json();
@@ -60,7 +62,7 @@ async function actualizarDisponibilidadSheets(tours, fecha) {
     // Escribir todos los tours desde fila 9
     const todosLosTours = [...nuevasFilas, ...toursNoMencionados];
     const writeRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A9:C?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetRange)}?valueInputOption=USER_ENTERED`,
       {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
