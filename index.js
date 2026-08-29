@@ -199,15 +199,19 @@ app.post("/webhook", async (req, res) => {
         // Extraer tours disponibles del mensaje
         const lineas = text.split("\n");
         const tours = [];
+        const palabrasExcluidas = ["nexxtours", "tenemos", "disponib", "mañana", "actividades", "informa", "atentos", "reservas", "consultas"];
         for (const linea of lineas) {
-          if (linea.includes("✅")) {
+          // Detectar líneas que son tours (tienen emojis de transporte/naturaleza al inicio)
+          const tieneEmoji = /^[🚌🚤🌴🪼🦚🤿🦝🌊🐬🌋🐢☀️*_]+/.test(linea.trim());
+          if (tieneEmoji && linea.trim().length > 5) {
             const tourNombre = linea
-              .replace(/[✅🚌🚤🌴🪼🦚🤿🦝🌊🐬🌋🐢☀️]/gu, "")
-              .replace(/[-*•]/g, "")
+              .replace(/[🚌🚤🌴🪼🦚🤿🦝🌊🐬🌋🐢☀️✅]/gu, "")
+              .replace(/[-*•_]/g, "")
               .replace(/\(por tierra.*?\)/gi, "")
               .replace(/\(por lancha.*?\)/gi, "")
               .trim();
-            if (tourNombre.length > 3 && !tourNombre.toLowerCase().includes("tenemos") && !tourNombre.toLowerCase().includes("disponib")) {
+            const esExcluida = palabrasExcluidas.some(p => tourNombre.toLowerCase().includes(p));
+            if (tourNombre.length > 3 && !esExcluida) {
               tours.push(tourNombre);
             }
           }
@@ -224,13 +228,6 @@ app.post("/webhook", async (req, res) => {
         } else {
           // Si no encontró tours con ✅, intentar extraer de otra forma
           const toursAlternativo = [];
-          const lineas2 = text.split("\n");
-          for (const linea of lineas2) {
-            if (linea.includes("-") && linea.length > 5 && !linea.toLowerCase().includes("nexxtours") && !linea.toLowerCase().includes("tenemos") && !linea.toLowerCase().includes("disponib")) {
-              const nombre = linea.replace(/[-*•✅]/g, "").replace(/[🚌🚤🌴🪼🦚🤿🦝🌊🐬🌋🐢☀️]/gu, "").trim();
-              if (nombre.length > 3) toursAlternativo.push(nombre);
-            }
-          }
           console.log(`🔍 Tours alternativos: ${JSON.stringify(toursAlternativo)}`);
           if (toursAlternativo.length > 0) {
             const ok = await actualizarDisponibilidadSheets(toursAlternativo, fecha);
