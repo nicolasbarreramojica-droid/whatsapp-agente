@@ -4,6 +4,66 @@ const app = express();
 app.use(express.json());
 
 // ─── Google Sheets via Service Account ───────────────────────────────────────
+async function confirmarPagoSheets(bookingId) {
+  try {
+    const token = await getGoogleAccessToken();
+    
+    // Determinar qué sheet actualizar según el tipo de booking
+    let spreadsheetId, sheetName, colEstado;
+    if (bookingId.startsWith("TOUR-")) {
+      spreadsheetId = "1UZWSLqj5f6D1po0ion2vv2VKsXP0CATZ5KnTPAqWCgk";
+      sheetName = "registro de toures cartagena stay venture";
+      colEstado = 26; // Columna AA (Estado de la reserva) - índice 0
+    } else {
+      spreadsheetId = "1MxLINUs0OTSf2bCczP6wYTTd7onRnDM6cdboPIkbCbQ";
+      sheetName = "Registro de estancias Cartagena Stay venture";
+      colEstado = 13; // Columna N (estado) - índice 0
+    }
+
+    // Leer el sheet para encontrar la fila con el booking_id
+    const readRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A:A`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const readData = await readRes.json();
+    const filas = readData.values || [];
+    
+    // Buscar la fila con el booking_id
+    let filaIndex = -1;
+    for (let i = 0; i < filas.length; i++) {
+      if (filas[i][0] === bookingId) {
+        filaIndex = i + 1; // +1 porque Sheets es 1-indexed
+        break;
+      }
+    }
+
+    if (filaIndex === -1) {
+      console.error(`❌ No se encontró el booking_id ${bookingId} en Sheets`);
+      return false;
+    }
+
+    // Determinar la columna correcta según el tipo
+    const colLetra = bookingId.startsWith("TOUR-") ? "AA" : "N";
+    
+    // Actualizar el estado a CONFIRMADA
+    const updateRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${colLetra}${filaIndex}?valueInputOption=USER_ENTERED`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ values: [["CONFIRMADA"]] })
+      }
+    );
+    const updateData = await updateRes.json();
+    console.log(`✅ Estado actualizado a CONFIRMADA para ${bookingId}:`, JSON.stringify(updateData));
+    return true;
+  } catch (err) {
+    console.error("❌ Error confirmando pago en Sheets:", err.message);
+    return false;
+  }
+}
+
+
 async function getGoogleAccessToken() {
   const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
   const now = Math.floor(Date.now() / 1000);
@@ -322,11 +382,16 @@ async function handleMessage(text, from, platform) {
 
     // Si el mensaje es de disponibilidad de Next Tour → ya fue procesado en webhook, no redirigir
 
-    // Si es confirmación de pago → redirigir al agente correcto según booking_id
+    // Si es confirmación de pago → actualizar Sheets y redirigir al agente correcto
     if (text.startsWith("🔑 PAGO CONFIRMADO:")) {
       console.log(`💰 Confirmación de pago recibida: ${text}`);
       const bookingId = text.replace("🔑 PAGO CONFIRMADO:", "").trim();
-      // Si el booking_id empieza con TOUR → agente de tours
+      
+      // Actualizar estado en Google Sheets directamente desde Render
+      const sheetsOk = await confirmarPagoSheets(bookingId);
+      console.log(`📊 Actualización en Sheets: ${sheetsOk ? "✅ exitosa" : "❌ fallida"}`);
+      
+      // Redirigir al agente correcto según booking_id
       if (bookingId.startsWith("TOUR-")) {
         agentId = RELEVANCE_TOURS_AGENT_ID;
         agenteActual = "tours";
