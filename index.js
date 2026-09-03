@@ -147,6 +147,7 @@ const INSTAGRAM_TOKEN = process.env.INSTAGRAM_TOKEN;
 const RELEVANCE_API_KEY = process.env.RELEVANCE_API_KEY;
 const RELEVANCE_AGENT_ID = process.env.RELEVANCE_AGENT_ID;
 const RELEVANCE_TOURS_AGENT_ID = process.env.RELEVANCE_TOURS_AGENT_ID;
+const RELEVANCE_PACKAGES_AGENT_ID = process.env.RELEVANCE_PACKAGES_AGENT_ID;
 const BOLD_API_KEY = process.env.BOLD_API_KEY;
 const BOLD_SECRET_KEY = process.env.BOLD_SECRET_KEY;
 
@@ -378,7 +379,9 @@ app.post("/crear-pago", async (req, res) => {
 async function handleMessage(text, from, platform) {
   try {
     let agenteActual = agentesActivos[from] || "apartamentos";
-    let agentId = agenteActual === "tours" ? RELEVANCE_TOURS_AGENT_ID : RELEVANCE_AGENT_ID;
+    let agentId = agenteActual === "tours" ? RELEVANCE_TOURS_AGENT_ID : 
+                  agenteActual === "paquetes" ? RELEVANCE_PACKAGES_AGENT_ID :
+                  RELEVANCE_AGENT_ID;
 
     // Si el mensaje es de disponibilidad de Next Tour → ya fue procesado en webhook, no redirigir
 
@@ -511,6 +514,14 @@ async function handleMessage(text, from, platform) {
       console.log(`🔔 Enviando aviso a número personal: ${mensajeAviso}`);
       await sendWhatsAppMessage("573222810384", mensajeAviso);
       agentReply = agentReply.replace(avisoMatch[0], "").trim();
+    }
+
+    // Detectar señal de transferencia a paquetes
+    if (agentReply.includes("CAMBIAR_A_PAQUETES")) {
+      console.log(`📦 Transfiriendo a agente de paquetes para ${from}`);
+      agentesActivos[from] = "paquetes";
+      delete conversaciones[`${from}_paquetes`];
+      agentReply = agentReply.replace("CAMBIAR_A_PAQUETES", "").trim();
     }
 
     // Detectar señal de regreso a apartamentos
