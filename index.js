@@ -157,24 +157,22 @@ const agentesActivos = {};
 const usuariosNuevos = new Set();
 
 // ─── Mensaje de bienvenida ───────────────────────────────────────────────────
-const MENSAJE_BIENVENIDA = `¡Hola! 🌴 Gracias por escribir a *Cartagena Stay Venture*, tu refugio en Cartagena, donde una gran experiencia comienza aquí ⛵🏖️☀️
+const MENSAJE_BIENVENIDA = `¡Hola! 🌴 Gracias por escribir a Cartagena Stay Venture, tu refugio en Cartagena, donde una gran experiencia comienza aquí ⛵🏖️☀️
 
-Te ayudamos con:
+Podemos ayudarte con:
 
-🏠 *Alojamiento* — Apartamentos turísticos a pasos de la playa, con piscina en la azotea y gimnasio. Muy bien ubicados cerca de la playa, el aeropuerto y el centro histórico.
-_(Torre Primis · 3 hab · y Edificio Acualina · 2 hab)_
+🏠 *Alojamiento* — apartamentos turísticos cómodos con piscina y bien ubicados, cerca de la playa, el aeropuerto y el Centro Histórico.
 
-⛵ *Tours y experiencias* — Islas del Rosario, Mambo Beach, Volcán del Totumo, plancton bioluminiscente, cultura y más.
-🚁 *Tours en helicóptero* — Vive Cartagena desde el aire con una vista espectacular de la ciudad amurallada, el mar Caribe y las islas. Una experiencia única e inolvidable.
+⛵ *Tours y experiencias* — Islas del Rosario, Mambo Beach, Tour Mágico, Top 5 Islas, Volcán del Totumo, plancton bioluminiscente, Golden Hour, cultura y mucho más.
 
-Para darte la mejor opción, cuéntanos:
-📅 Fechas
+🌙🚁 *Experiencias premium* — Noches en Barco, con cuatro planes desde $90.000 COP, y Barco + Helicóptero desde $395.000 COP.
+
+🌟 *Paquetes Todo en Uno* — alojamiento + experiencias + recogida en el aeropuerto en un solo precio cerrado. Elige entre Cartagena Esencial, Cartagena Completa y Cartagena Premium.
+
+Para ayudarte, envíame:
+📅 Fechas aproximadas
 👥 Número de personas
-✨ ¿Alojamiento, tours o ambos?
-
-Dame tus fechas aproximadas y te doy disponibilidad y precio al instante.
-
-¡Bienvenido/a al Caribe colombiano! ☀️`;
+✨ ¿Alojamiento, tours o paquete Todo en Uno?`;
 
 // ─── Health check para UptimeRobot ───────────────────────────────────────────
 app.get("/health", (req, res) => {
