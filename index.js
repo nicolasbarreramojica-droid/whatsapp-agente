@@ -144,6 +144,7 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "mi_token_secreto";
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const INSTAGRAM_TOKEN = process.env.INSTAGRAM_TOKEN;
+const MESSENGER_TOKEN = process.env.MESSENGER_TOKEN;
 const RELEVANCE_API_KEY = process.env.RELEVANCE_API_KEY;
 const RELEVANCE_AGENT_ID = process.env.RELEVANCE_AGENT_ID;
 const RELEVANCE_TOURS_AGENT_ID = process.env.RELEVANCE_TOURS_AGENT_ID;
@@ -323,6 +324,30 @@ app.post("/webhook", async (req, res) => {
       }, 4000);
 
       await handleMessage(text, from, "whatsapp");
+    } else {
+      res.sendStatus(200);
+    }
+    return;
+  }
+
+  // ── Messenger ─────────────────────────────────────────────────────────────
+  if (body.object === "page") {
+    const messaging = body.entry?.[0]?.messaging?.[0];
+    if (messaging && messaging.message && !messaging.message.is_echo) {
+      const from = messaging.sender.id;
+      const text = messaging.message.text;
+      if (text) {
+        console.log(`💬 Messenger de ${from}: ${text}`);
+        res.sendStatus(200);
+        // Enviar bienvenida si es la primera vez
+        if (!usuariosNuevos.has(from)) {
+          usuariosNuevos.add(from);
+          await sendMessengerMessage(from, MENSAJE_BIENVENIDA);
+        }
+        await handleMessage(text, from, "messenger");
+      } else {
+        res.sendStatus(200);
+      }
     } else {
       res.sendStatus(200);
     }
@@ -597,6 +622,8 @@ async function sendMessage(to, text, platform) {
     await sendWhatsAppMessage(to, text);
   } else if (platform === "instagram") {
     await sendInstagramMessage(to, text);
+  } else if (platform === "messenger") {
+    await sendMessengerMessage(to, text);
   }
 }
 
@@ -642,6 +669,24 @@ async function sendWhatsAppImage(to, imageUrl, caption) {
   const data = await response.json();
   console.log("📤 Imagen enviada:", JSON.stringify(data));
   return data;
+}
+
+// ─── Messenger ───────────────────────────────────────────────────────────────
+async function sendMessengerMessage(to, text) {
+  const url = `https://graph.facebook.com/v19.0/me/messages`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${MESSENGER_TOKEN}`,
+    },
+    body: JSON.stringify({
+      recipient: { id: to },
+      message: { text },
+    }),
+  });
+  const data = await response.json();
+  console.log("📤 Messenger enviado:", JSON.stringify(data));
 }
 
 // ─── Instagram ────────────────────────────────────────────────────────────────
