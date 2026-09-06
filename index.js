@@ -145,6 +145,7 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const INSTAGRAM_TOKEN = process.env.INSTAGRAM_TOKEN;
 const MESSENGER_TOKEN = process.env.MESSENGER_TOKEN;
+const INSTAGRAM_ACCOUNT_ID = process.env.INSTAGRAM_ACCOUNT_ID;
 const RELEVANCE_API_KEY = process.env.RELEVANCE_API_KEY;
 const RELEVANCE_AGENT_ID = process.env.RELEVANCE_AGENT_ID;
 const RELEVANCE_TOURS_AGENT_ID = process.env.RELEVANCE_TOURS_AGENT_ID;
@@ -691,7 +692,8 @@ async function sendMessengerMessage(to, text) {
 
 // ─── Instagram ────────────────────────────────────────────────────────────────
 async function sendInstagramMessage(to, text) {
-  const url = `https://graph.facebook.com/v19.0/me/messages`;
+  const accountId = INSTAGRAM_ACCOUNT_ID || "me";
+  const url = `https://graph.facebook.com/v19.0/${accountId}/messages`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
