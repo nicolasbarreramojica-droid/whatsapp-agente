@@ -507,6 +507,15 @@ async function handleMessage(text, from, platform) {
       agentesActivos[from] = "tours";
       delete conversaciones[`${from}_tours`];
       agentReply = agentReply.replace("CAMBIAR_A_TOURS", "").trim();
+
+      // Enviar la respuesta de transición al cliente y luego activar el agente de tours
+      // con el mensaje original para que responda de inmediato (sin que el cliente tenga que repetir)
+      if (agentReply) {
+        await sendMessage(from, agentReply, platform);
+      }
+      console.log(`🌴 Re-enviando mensaje original al agente de tours: "${text.substring(0, 50)}"`);
+      await handleMessage(text, from, platform);
+      return;
     }
 
     // Detectar señal de aviso de tour/paquete
@@ -546,6 +555,14 @@ async function handleMessage(text, from, platform) {
       agentesActivos[from] = "paquetes";
       delete conversaciones[`${from}_paquetes`];
       agentReply = agentReply.replace("CAMBIAR_A_PAQUETES", "").trim();
+
+      // Enviar la respuesta de transición y activar el agente de paquetes con el mensaje original
+      if (agentReply) {
+        await sendMessage(from, agentReply, platform);
+      }
+      console.log(`📦 Re-enviando mensaje original al agente de paquetes: "${text.substring(0, 50)}"`);
+      await handleMessage(text, from, platform);
+      return;
     }
 
     // Detectar señal de regreso a apartamentos
@@ -554,6 +571,14 @@ async function handleMessage(text, from, platform) {
       agentesActivos[from] = "apartamentos";
       delete conversaciones[`${from}_apartamentos`];
       agentReply = agentReply.replace("CAMBIAR_A_APARTAMENTOS", "").trim();
+
+      // Enviar la respuesta de transición y activar el agente de apartamentos con el mensaje original
+      if (agentReply) {
+        await sendMessage(from, agentReply, platform);
+      }
+      console.log(`🏠 Re-enviando mensaje original al agente de apartamentos: "${text.substring(0, 50)}"`);
+      await handleMessage(text, from, platform);
+      return;
     }
 
     await sendMessage(from, agentReply, platform);
