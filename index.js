@@ -244,6 +244,14 @@ app.post("/webhook", async (req, res) => {
     if (message && message.type === "text") {
       const from = message.from;
       const text = message.text.body;
+
+      // Ignorar mensajes sin número de teléfono válido (ej. mensajes de Instagram cruzados)
+      if (!from || from === "undefined") {
+        console.log(`⚠️ Mensaje ignorado: 'from' es undefined. Tipo de mensaje: ${message.type}`);
+        res.sendStatus(200);
+        return;
+      }
+
       console.log(`📩 WhatsApp de ${from}: ${text}`);
       res.sendStatus(200);
       // Enviar bienvenida si es la primera vez
